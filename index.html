@@ -1,0 +1,359 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#111827">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <title>Branco Stats — Estimativa da Próxima Rodada</title>
+  <style>
+    :root{
+      color-scheme:dark; --bg:#070b14; --panel:#121827; --panel2:#192235;
+      --line:#2b3854; --text:#f8fafc; --muted:#9aa7bd; --blue:#2563eb;
+      --green:#22c55e; --red:#ef4444; --black:#111827; --white:#f8fafc;
+      --yellow:#eab308;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:linear-gradient(180deg,#070b14,#0b1220);color:var(--text);
+      font:15px system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
+    .app{max-width:1000px;margin:auto;padding:16px 14px calc(24px + env(safe-area-inset-bottom))}
+    header{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:14px}
+    h1{font-size:22px;margin:0 0 4px}.muted{color:var(--muted)}
+    .status{padding:8px 11px;border-radius:999px;background:#3f2f05;color:#fde68a;font-weight:800;white-space:nowrap}
+    .status.online{background:#073b22;color:#86efac}.status.error{background:#4a1212;color:#fca5a5}
+    .toolbar,.cards,.prob-grid,.summary-grid{display:grid;gap:10px}
+    .toolbar{grid-template-columns:1fr auto auto;margin-bottom:12px}
+    button,input{border:1px solid var(--line);border-radius:12px;background:var(--panel2);color:var(--text);padding:11px}
+    button{cursor:pointer;font-weight:800}.primary{background:var(--blue);border-color:var(--blue)}
+    .panel{background:rgba(18,24,39,.96);border:1px solid var(--line);border-radius:16px;padding:14px;margin-bottom:12px}
+    .panel h2{font-size:16px;margin:0 0 11px}.summary-grid{grid-template-columns:repeat(4,1fr)}
+    .metric{background:var(--panel2);border:1px solid var(--line);border-radius:13px;padding:12px}
+    .metric b{display:block;font-size:21px;margin-top:4px}.metric span{font-size:12px;color:var(--muted)}
+    .prob-grid{grid-template-columns:repeat(3,1fr)}
+    .prob{position:relative;border:2px solid var(--line);border-radius:15px;padding:15px;text-align:center;background:var(--panel2)}
+    .prob.best{border-color:var(--green);box-shadow:0 0 0 2px rgba(34,197,94,.16)}
+    .dot{width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:5px}
+    .red{background:var(--red)}.dark{background:#020617;border:1px solid #64748b}.light{background:var(--white)}
+    .prob strong{display:block;font-size:27px;margin-top:5px}.best-tag{display:none;color:#86efac;font-size:11px;font-weight:900;margin-top:6px}
+    .prob.best .best-tag{display:block}
+    .note{font-size:12px;color:var(--muted);line-height:1.45;margin-top:10px}
+    .history{overflow:auto;max-height:540px;border-radius:12px;border:1px solid var(--line)}
+    table{width:100%;border-collapse:collapse;min-width:580px}
+    th,td{padding:10px;border-bottom:1px solid var(--line);text-align:left}
+    th{position:sticky;top:0;background:#111827;z-index:1;color:#cbd5e1;font-size:12px}
+    tr:last-child td{border-bottom:0}.pill{display:inline-flex;align-items:center;padding:5px 8px;border-radius:999px;font-weight:800;font-size:12px}
+    .pill.redpill{background:#4a1518;color:#fecaca}.pill.blackpill{background:#020617;color:#e2e8f0;border:1px solid #475569}
+    .pill.whitepill{background:#f8fafc;color:#111827}
+    .empty{text-align:center;color:var(--muted);padding:28px}
+    details{margin-top:10px}summary{cursor:pointer;color:#bfdbfe}
+    .diag{margin-top:10px;padding:10px;border:1px dashed var(--line);border-radius:12px;
+      background:#0b1220;color:#cbd5e1;font:12px ui-monospace,SFMono-Regular,Consolas,monospace;
+      white-space:pre-wrap;word-break:break-word}
+    .manual-grid{display:grid;grid-template-columns:1fr auto;gap:8px;margin-top:10px}
+    textarea{width:100%;min-height:92px;resize:vertical;border:1px solid var(--line);border-radius:12px;
+      background:var(--panel2);color:var(--text);padding:11px;font:inherit}
+    .config{display:grid;grid-template-columns:1fr auto;gap:8px;margin-top:10px}
+    @media(max-width:720px){.summary-grid{grid-template-columns:repeat(2,1fr)}.toolbar{grid-template-columns:1fr 1fr}.toolbar input{grid-column:1/-1}.prob-grid{grid-template-columns:1fr}.prob{display:grid;grid-template-columns:1fr auto;align-items:center;text-align:left}.prob strong{margin:0}.best-tag{grid-column:1/-1}}
+  </style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div>
+      <h1>Branco Stats</h1>
+      <div class="muted">Histórico de 48 horas e estimativa estatística da próxima rodada</div>
+    </div>
+    <div id="status" class="status">AGUARDANDO</div>
+  </header>
+
+  <div class="toolbar">
+    <input id="search" placeholder="Filtrar por número, cor ou horário">
+    <button id="refresh" class="primary">Atualizar agora</button>
+    <button id="auto">Auto: ligado</button>
+  </div>
+
+  <section class="panel">
+    <h2>Resumo das últimas 48 horas</h2>
+    <div class="summary-grid">
+      <div class="metric"><span>Rodadas analisadas</span><b id="total">0</b></div>
+      <div class="metric"><span>Brancos</span><b id="whiteCount">0</b></div>
+      <div class="metric"><span>Desde o último branco</span><b id="sinceWhite">—</b></div>
+      <div class="metric"><span>Última atualização</span><b id="updated" style="font-size:15px">—</b></div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Estimativa estatística da próxima rodada</h2>
+    <div class="prob-grid">
+      <div id="predRedCard" class="prob">
+        <div><span class="dot red"></span>Vermelho</div><strong id="predRedPct">46,67%</strong>
+        <div class="best-tag">● MAIOR ESTIMATIVA</div>
+      </div>
+      <div id="predBlackCard" class="prob">
+        <div><span class="dot dark"></span>Preto</div><strong id="predBlackPct">46,67%</strong>
+        <div class="best-tag">● MAIOR ESTIMATIVA</div>
+      </div>
+      <div id="predWhiteCard" class="prob">
+        <div><span class="dot light"></span>Branco</div><strong id="predWhitePct">6,67%</strong>
+        <div class="best-tag">● MAIOR ESTIMATIVA</div>
+      </div>
+    </div>
+    <div class="summary-grid" style="margin-top:10px">
+      <div class="metric"><span>Confiança do modelo</span><b id="confidence">Baixa</b></div>
+      <div class="metric"><span>Janela recente</span><b id="windowUsed">0</b></div>
+      <div class="metric"><span>Acertos no backtest</span><b id="backtest">—</b></div>
+      <div class="metric"><span>Última estimativa</span><b id="predictionUpdated" style="font-size:15px">—</b></div>
+    </div>
+    <div class="note">
+      Esta é uma estimativa heurística baseada em frequências recentes, histórico de 48 horas e probabilidades teóricas.
+      Não existe garantia de acerto. Em rodadas independentes, o histórico pode não melhorar a previsão da próxima rodada.
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Frequência observada no histórico</h2>
+    <div class="prob-grid">
+      <div id="redCard" class="prob">
+        <div><span class="dot red"></span>Vermelho</div><strong id="redPct">0,00%</strong>
+        <div class="best-tag">● MAIOR FREQUÊNCIA OBSERVADA</div>
+      </div>
+      <div id="blackCard" class="prob">
+        <div><span class="dot dark"></span>Preto</div><strong id="blackPct">0,00%</strong>
+        <div class="best-tag">● MAIOR FREQUÊNCIA OBSERVADA</div>
+      </div>
+      <div id="whiteCard" class="prob">
+        <div><span class="dot light"></span>Branco</div><strong id="whitePct">0,00%</strong>
+        <div class="best-tag">● MAIOR FREQUÊNCIA OBSERVADA</div>
+      </div>
+    </div>
+    <div class="note">
+      Neste quadro, o verde representa somente a cor que mais apareceu no período analisado. A estimativa da próxima rodada é mostrada separadamente acima.
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Rodada por rodada</h2>
+    <div class="history">
+      <table>
+        <thead><tr><th>Data e hora</th><th>Número</th><th>Cor</th><th>Frequência até a rodada</th></tr></thead>
+        <tbody id="tbody"><tr><td colspan="4" class="empty">Nenhum resultado carregado.</td></tr></tbody>
+      </table>
+    </div>
+
+    <details>
+      <summary>Configuração da fonte de dados</summary>
+      <div class="config">
+        <input id="apiUrl" placeholder="URL opcional de uma API JSON autorizada">
+        <button id="saveApi">Salvar</button>
+      </div>
+      <div class="note">
+        Por padrão, o app consulta a função Netlify incluída no pacote. Também aceita uma URL própria que retorne
+        uma lista JSON com data/hora, número e cor. Não realiza login e não executa apostas.
+      </div>
+
+      <div id="diagnostic" class="diag">Diagnóstico ainda não executado.</div>
+
+      <div class="manual-grid">
+        <textarea id="manualData" placeholder="Modo manual: cole uma sequência como 1, 8, 0, 4, 12 ou vermelho, preto, branco. O primeiro item será considerado o mais antigo."></textarea>
+        <button id="importManual">Importar</button>
+      </div>
+      <div class="note">
+        O modo manual mantém o painel funcionando quando a fonte externa estiver bloqueada ou indisponível.
+      </div>
+    </details>
+  </section>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const state = { rows: [], auto: true, timer: null };
+const nf = new Intl.NumberFormat('pt-BR');
+const pf = new Intl.NumberFormat('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+
+function normalizeColor(v,n){
+  const s=String(v??'').toLowerCase();
+  if(['0','white','branco'].includes(s)||Number(n)===0)return 'white';
+  if(['1','red','vermelho'].includes(s))return 'red';
+  if(['2','black','preto'].includes(s))return 'black';
+  const x=Number(n);
+  if(x>=1&&x<=7)return 'red';
+  if(x>=8&&x<=14)return 'black';
+  return 'unknown';
+}
+function normalize(raw){
+  const arr = Array.isArray(raw) ? raw : (raw.records||raw.results||raw.data||raw.history||[]);
+  return arr.map((r,i)=>{
+    const number = r.roll ?? r.number ?? r.value ?? r.result ?? '';
+    const color = normalizeColor(r.color ?? r.colour, number);
+    const date = new Date(r.created_at ?? r.createdAt ?? r.date ?? r.timestamp ?? Date.now());
+    const id = r.id ?? r.uuid ?? `${date.toISOString()}-${number}-${i}`;
+    return {id:String(id),number:Number(number),color,date};
+  }).filter(x=>x.color!=='unknown'&&!isNaN(x.date)).sort((a,b)=>b.date-a.date);
+}
+function cutoff48(rows){ const c=Date.now()-48*3600*1000; return rows.filter(r=>r.date.getTime()>=c); }
+function pct(n,t){return t?pf.format(n*100/t)+'%':'0,00%'}
+function colorLabel(c){return c==='red'?'Vermelho':c==='black'?'Preto':'Branco'}
+function pill(c){return c==='red'?'redpill':c==='black'?'blackpill':'whitepill'}
+function setStatus(text,kind=''){const e=$('#status');e.textContent=text;e.className='status '+kind}
+
+function weightedPrediction(rows){
+  const prior={red:7/15,black:7/15,white:1/15};
+  if(!rows.length) return {p:prior,window:0,confidence:'Baixa'};
+
+  const recent25=rows.slice(0,25), recent100=rows.slice(0,100), all=rows;
+  const freq=(arr)=>{
+    const c={red:0,black:0,white:0};
+    arr.forEach(r=>c[r.color]++);
+    const t=arr.length||1;
+    return {red:c.red/t,black:c.black/t,white:c.white/t};
+  };
+  const f25=freq(recent25), f100=freq(recent100), fall=freq(all);
+
+  // Forte regularização para evitar que pequenas sequências distorçam a estimativa.
+  const raw={};
+  ['red','black','white'].forEach(c=>{
+    raw[c]=0.55*prior[c]+0.25*f25[c]+0.15*f100[c]+0.05*fall[c];
+  });
+  const sum=raw.red+raw.black+raw.white;
+  const p={red:raw.red/sum,black:raw.black/sum,white:raw.white/sum};
+  const sorted=Object.values(p).sort((a,b)=>b-a);
+  const gap=sorted[0]-sorted[1];
+  const confidence=gap>=0.12?'Moderada':gap>=0.06?'Baixa':'Muito baixa';
+  return {p,window:recent25.length,confidence};
+}
+function backtestAccuracy(rows){
+  if(rows.length<30)return null;
+  const chronological=[...rows].sort((a,b)=>a.date-b.date);
+  let hits=0,total=0;
+  for(let i=25;i<chronological.length;i++){
+    const past=[...chronological.slice(0,i)].sort((a,b)=>b.date-a.date);
+    const pred=weightedPrediction(past).p;
+    const best=Object.keys(pred).sort((a,b)=>pred[b]-pred[a])[0];
+    if(best===chronological[i].color)hits++;
+    total++;
+  }
+  return total?hits/total:null;
+}
+function renderPrediction(rows){
+  const r=weightedPrediction(rows);
+  $('#predRedPct').textContent=pct(r.p.red,1);
+  $('#predBlackPct').textContent=pct(r.p.black,1);
+  $('#predWhitePct').textContent=pct(r.p.white,1);
+  ['red','black','white'].forEach(c=>$('#pred'+c.charAt(0).toUpperCase()+c.slice(1)+'Card').classList.remove('best'));
+  const max=Math.max(r.p.red,r.p.black,r.p.white);
+  ['red','black','white'].filter(c=>Math.abs(r.p[c]-max)<1e-9).forEach(c=>{
+    $('#pred'+c.charAt(0).toUpperCase()+c.slice(1)+'Card').classList.add('best');
+  });
+  $('#confidence').textContent=r.confidence;
+  $('#windowUsed').textContent=r.window;
+  const bt=backtestAccuracy(rows);
+  $('#backtest').textContent=bt===null?'Dados insuficientes':pf.format(bt*100)+'%';
+  $('#predictionUpdated').textContent=new Date().toLocaleTimeString('pt-BR');
+}
+
+function render(){
+  let rows=cutoff48(state.rows);
+  renderPrediction(rows);
+  const q=$('#search').value.trim().toLowerCase();
+  const filtered=q?rows.filter(r=>String(r.number).includes(q)||colorLabel(r.color).toLowerCase().includes(q)||r.date.toLocaleString('pt-BR').includes(q)):rows;
+  const counts={red:0,black:0,white:0}; rows.forEach(r=>counts[r.color]++);
+  $('#total').textContent=nf.format(rows.length); $('#whiteCount').textContent=nf.format(counts.white);
+  $('#redPct').textContent=pct(counts.red,rows.length); $('#blackPct').textContent=pct(counts.black,rows.length); $('#whitePct').textContent=pct(counts.white,rows.length);
+  ['red','black','white'].forEach(c=>$('#'+c+'Card').classList.remove('best'));
+  if(rows.length){const max=Math.max(counts.red,counts.black,counts.white); ['red','black','white'].filter(c=>counts[c]===max).forEach(c=>$('#'+c+'Card').classList.add('best'))}
+  const lastWhite=rows.findIndex(r=>r.color==='white'); $('#sinceWhite').textContent=lastWhite<0?(rows.length?'>'+rows.length:'—'):lastWhite;
+  const chronological=[...rows].sort((a,b)=>a.date-b.date); const running={red:0,black:0,white:0}; const runMap={};
+  chronological.forEach((r,i)=>{running[r.color]++;runMap[r.id]={...running,total:i+1}});
+  $('#tbody').innerHTML=filtered.length?filtered.map(r=>{
+    const x=runMap[r.id]||counts;
+    return `<tr><td>${r.date.toLocaleString('pt-BR')}</td><td>${r.number}</td><td><span class="pill ${pill(r.color)}">${colorLabel(r.color)}</span></td><td>V ${pct(x.red,x.total)} · P ${pct(x.black,x.total)} · B ${pct(x.white,x.total)}</td></tr>`
+  }).join(''):`<tr><td colspan="4" class="empty">Nenhum resultado encontrado.</td></tr>`;
+}
+async function load(){
+  setStatus('ATUALIZANDO');
+  const diagnostic=$('#diagnostic');
+  const custom=localStorage.getItem('brancoStatsApi');
+  const candidates=custom
+    ? [custom]
+    : [
+        '/.netlify/functions/blaze-history',
+        '/api/history.json'
+      ];
+
+  const messages=[];
+  for(const url of candidates){
+    try{
+      messages.push(`Tentando: ${url}`);
+      const res=await fetch(url,{cache:'no-store'});
+      messages.push(`Resposta HTTP: ${res.status}`);
+      if(!res.ok) throw new Error('HTTP '+res.status);
+
+      const data=await res.json();
+      if(data && data.error) throw new Error(data.error + (data.detail ? ' — '+data.detail : ''));
+
+      const rows=normalize(data);
+      messages.push(`Registros reconhecidos: ${rows.length}`);
+      if(!rows.length) throw new Error('A fonte respondeu, mas nenhum resultado válido foi reconhecido.');
+
+      const byId=new Map([...state.rows,...rows].map(r=>[r.id,r]));
+      state.rows=cutoff48([...byId.values()].sort((a,b)=>b.date-a.date));
+      localStorage.setItem('brancoStatsRows',JSON.stringify(state.rows.map(r=>({...r,date:r.date.toISOString()}))));
+      $('#updated').textContent=new Date().toLocaleTimeString('pt-BR');
+      diagnostic.textContent=messages.join('
+');
+      setStatus('AO VIVO','online');
+      render();
+      return;
+    }catch(e){
+      messages.push(`Falha: ${e.message}`);
+    }
+  }
+
+  diagnostic.textContent=messages.join('
+');
+  setStatus(state.rows.length ? 'DADOS SALVOS' : 'SEM CONEXÃO', state.rows.length ? '' : 'error');
+  render();
+}
+function schedule(){clearInterval(state.timer); if(state.auto)state.timer=setInterval(load,10000)}
+$('#refresh').onclick=load;
+$('#auto').onclick=()=>{state.auto=!state.auto;$('#auto').textContent='Auto: '+(state.auto?'ligado':'desligado');schedule()}
+$('#search').oninput=render;
+
+$('#saveApi').onclick=()=>{
+  const v=$('#apiUrl').value.trim();
+  if(v)localStorage.setItem('brancoStatsApi',v);else localStorage.removeItem('brancoStatsApi');
+  load();
+};
+$('#importManual').onclick=()=>{
+  const raw=$('#manualData').value.trim();
+  if(!raw)return;
+  const tokens=raw.split(/[\s,;|]+/).filter(Boolean);
+  const start=Date.now()-Math.max(0,tokens.length-1)*15000;
+  const rows=tokens.map((token,i)=>{
+    let number=Number(token);
+    let color='unknown';
+    const s=token.toLowerCase();
+    if(['vermelho','red','v'].includes(s)){color='red';number=1}
+    else if(['preto','black','p'].includes(s)){color='black';number=8}
+    else if(['branco','white','b'].includes(s)){color='white';number=0}
+    else color=normalizeColor('',number);
+    const date=new Date(start+i*15000);
+    return {id:`manual-${date.toISOString()}-${number}-${i}`,number,color,date};
+  }).filter(r=>r.color!=='unknown');
+
+  const byId=new Map([...state.rows,...rows].map(r=>[r.id,r]));
+  state.rows=cutoff48([...byId.values()].sort((a,b)=>b.date-a.date));
+  localStorage.setItem('brancoStatsRows',JSON.stringify(state.rows.map(r=>({...r,date:r.date.toISOString()}))));
+  $('#diagnostic').textContent=`Importação manual concluída: ${rows.length} rodadas.`;
+  $('#updated').textContent=new Date().toLocaleTimeString('pt-BR');
+  setStatus('MODO MANUAL');
+  render();
+};
+try{state.rows=(JSON.parse(localStorage.getItem('brancoStatsRows')||'[]')).map(r=>({...r,date:new Date(r.date)}))}catch{}
+$('#apiUrl').value=localStorage.getItem('brancoStatsApi')||'';
+render();load();schedule();
+if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js');
+</script>
+</body>
+</html>
