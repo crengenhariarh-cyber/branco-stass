@@ -3,6 +3,7 @@
   "name": "branco-stats-api",
   "main": "worker.js",
   "compatibility_date": "2026-07-20",
+  "keep_vars": true,
   "observability": {
     "enabled": true
   }
