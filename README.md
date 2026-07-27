@@ -21,3 +21,4 @@ Rotas:
 ## Interface
 
 Os arquivos do PWA permanecem na raiz para publicação da interface.
+Teste do primeiro deploy automático.
