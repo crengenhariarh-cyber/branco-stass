@@ -22,3 +22,4 @@ Rotas:
 
 Os arquivos do PWA permanecem na raiz para publicação da interface.
 Teste do primeiro deploy automático.
+Teste de deploy automático 27/07/2026.
