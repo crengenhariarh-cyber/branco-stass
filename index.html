@@ -61,7 +61,7 @@
 <div class="app">
   <header>
     <div>
-      <h1>Branco Stats</h1>
+      <h1>Branco Stats <small style='font-size:12px;color:#94a3b8'>V3.0</small></h1>
       <div class="muted">Histórico de 48 horas e estimativa estatística da próxima rodada</div>
     </div>
     <div id="status" class="status">AGUARDANDO</div>
@@ -148,7 +148,7 @@
         <button id="saveApi">Salvar</button>
       </div>
       <div class="note">
-        Por padrão, o app consulta a função Netlify incluída no pacote. Também aceita uma URL própria que retorne
+        Informe a URL do Cloudflare Worker terminando em /history. O Worker buscará a fonte e retornará
         uma lista JSON com data/hora, número e cor. Não realiza login e não executa apostas.
       </div>
 
@@ -274,14 +274,17 @@ async function load(){
   setStatus('ATUALIZANDO');
   const diagnostic=$('#diagnostic');
   const custom=localStorage.getItem('brancoStatsApi');
-  const candidates=custom
-    ? [custom]
-    : [
-        '/.netlify/functions/blaze-history',
-        '/api/history.json'
-      ];
+  const candidates=custom ? [custom] : [];
 
   const messages=[];
+  if(!candidates.length){
+    messages.push('Worker ainda não configurado.');
+    messages.push('Abra Configuração da fonte de dados e informe a URL terminando em /history.');
+    diagnostic.textContent=messages.join('\n');
+    setStatus(state.rows.length ? 'DADOS SALVOS' : 'CONFIGURAR API', state.rows.length ? '' : 'error');
+    render();
+    return;
+  }
   for(const url of candidates){
     try{
       messages.push(`Tentando: ${url}`);
@@ -324,6 +327,30 @@ $('#saveApi').onclick=()=>{
   const v=$('#apiUrl').value.trim();
   if(v)localStorage.setItem('brancoStatsApi',v);else localStorage.removeItem('brancoStatsApi');
   load();
+};
+$('#testHealth').onclick=async()=>{
+  const diagnostic=$('#diagnostic');
+  const historyUrl=localStorage.getItem('brancoStatsApi');
+  if(!historyUrl){
+    diagnostic.textContent='Informe a URL completa do Worker terminando em /history e toque em Salvar e testar.';
+    return;
+  }
+  const healthUrl=historyUrl.replace(/\/history\/?$/,'/health');
+  diagnostic.textContent='Testando Cloudflare Worker...';
+  try{
+    const r=await fetch(healthUrl,{cache:'no-store'});
+    const j=await r.json();
+    diagnostic.textContent=
+      `Worker: ${j.ok?'ONLINE':'ERRO'}
+Versão: ${j.version||'-'}
+`+
+      `Fonte configurada: ${j.source_configured?'SIM':'NÃO'}
+`+
+      `Verificado em: ${j.checked_at||'-'}`;
+  }catch(e){
+    diagnostic.textContent=`Não foi possível acessar o Worker.
+Erro: ${e.message}`;
+  }
 };
 $('#importManual').onclick=()=>{
   const raw=$('#manualData').value.trim();
